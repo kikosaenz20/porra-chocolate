@@ -471,7 +471,7 @@ async function loadFromDB(){
     res.forEach(r => { realRes[r.idx] = {h: r.home_goals, a: r.away_goals}; });
 
     // Restore KO bracket results from ko_equipos table
-    // Format stored: home_team = "TeamA|h-a|TeamB"
+    // Format stored: home_team = "TeamA|h-a|TeamB", away_team = winner (may be penalty winner on draw)
     ko.forEach(r => {
       const slotId = 'P' + r.idx;
       const encoded = r.home_team || '';
@@ -482,12 +482,14 @@ async function loadFromDB(){
         const away = parts[2] || '';
         if(score.length === 2){
           const h = parseInt(score[0]), a = parseInt(score[1]);
-          const winner = h > a ? home : (a > h ? away : null);
-          realBracketSlots[slotId] = {home, away, h, a, winner};
+          // Winner comes from away_team field (handles penalty shootout winners on draws)
+          const storedWinner = (r.away_team && r.away_team !== '-') ? r.away_team : null;
+          const winner = storedWinner || (h > a ? home : (a > h ? away : null));
+          const penWinner = (h === a && winner) ? winner : null;
+          realBracketSlots[slotId] = {home, away, h, a, winner, penWinner};
           propagateWinner(slotId, winner);
         }
       } else {
-        // Legacy format
         realKO[r.idx] = {home: r.home_team, away: r.away_team};
       }
     });
@@ -1709,6 +1711,9 @@ function renderAdmMatches(){
 
         if(admFilt === 'pend' && hv !== '') return;
 
+        const isDraw = hasTeams && hv !== '' && av !== '' && parseInt(hv) === parseInt(av);
+        const penWinner = slot.penWinner || '';
+
         html += `<div style="background:var(--bg3);border:1px solid ${fc?'var(--hit)':'var(--brd)'};
                               border-radius:7px;padding:8px 10px;margin-bottom:6px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1719,11 +1724,20 @@ function renderAdmMatches(){
           <div style="display:grid;grid-template-columns:1fr 38px 20px 38px 1fr;gap:6px;align-items:center">
             <span style="font-weight:600;font-size:.8rem;text-align:right;color:${winner===home?'#3fb950':'var(--txt)'}">${home}</span>
             <input class="adm-in ${fc}" type="number" min="0" max="30" value="${hv}"
-                   id="ko-h-${slotId}" placeholder="—" ${!hasTeams?'disabled':''}>
+                   id="ko-h-${slotId}" placeholder="—" ${!hasTeams?'disabled':''} oninput="checkDrawPenalty('${slotId}')">
             <span style="text-align:center;color:var(--dim);font-size:.75rem">-</span>
             <input class="adm-in ${fc}" type="number" min="0" max="30" value="${av}"
-                   id="ko-a-${slotId}" placeholder="—" ${!hasTeams?'disabled':''}>
+                   id="ko-a-${slotId}" placeholder="—" ${!hasTeams?'disabled':''} oninput="checkDrawPenalty('${slotId}')">
             <span style="font-weight:600;font-size:.8rem;color:${winner===away?'#3fb950':'var(--txt)'}">${away}</span>
+          </div>
+          <div id="pen-row-${slotId}" style="display:${isDraw?'flex':'none'};align-items:center;gap:8px;
+                      margin-top:8px;padding-top:8px;border-top:1px dashed var(--brd)">
+            <span style="font-size:.7rem;color:var(--dorado2)">⚽ Empate — ganador en penales:</span>
+            <select id="ko-pen-${slotId}" style="font-size:.75rem;padding:3px 6px">
+              <option value="">— elegir —</option>
+              <option value="${home}" ${penWinner===home?'selected':''}>${home}</option>
+              <option value="${away}" ${penWinner===away?'selected':''}>${away}</option>
+            </select>
           </div>
         </div>`;
       });
@@ -1731,6 +1745,16 @@ function renderAdmMatches(){
   }
 
   document.getElementById('adm-matches').innerHTML = html || '<div style="color:var(--dim);padding:12px">Sin partidos para mostrar.</div>';
+}
+
+function checkDrawPenalty(slotId){
+  const hEl = document.getElementById(`ko-h-${slotId}`);
+  const aEl = document.getElementById(`ko-a-${slotId}`);
+  const row = document.getElementById(`pen-row-${slotId}`);
+  if(!hEl || !aEl || !row) return;
+  const h = hEl.value.trim(), a = aEl.value.trim();
+  const isDraw = h !== '' && a !== '' && parseInt(h) === parseInt(a);
+  row.style.display = isDraw ? 'flex' : 'none';
 }
 
 async function saveRes(){
@@ -1768,10 +1792,17 @@ async function saveRes(){
     if(!slot) return;
 
     const hi = parseInt(h), ai = parseInt(a);
-    const winner = hi > ai ? slot.home : (ai > hi ? slot.away : null);
+    let winner = hi > ai ? slot.home : (ai > hi ? slot.away : null);
 
-    // Update in-memory bracket slot
-    realBracketSlots[slotId] = {...slot, h: hi, a: ai, winner};
+    // If draw, check penalty winner selector
+    if(winner === null){
+      const penEl = document.getElementById(`ko-pen-${slotId}`);
+      const penWinner = penEl?.value || '';
+      if(penWinner) winner = penWinner;
+    }
+
+    // Update in-memory bracket slot (h/a stay as 90'/120' score, winner may come from penalties)
+    realBracketSlots[slotId] = {...slot, h: hi, a: ai, winner, penWinner: winner && hi===ai ? winner : null};
     hEl.classList.add('filled'); aEl.classList.add('filled');
 
     // Propagate winner to next round slots
