@@ -219,7 +219,7 @@ select:focus{outline:2px solid var(--dorado);outline-offset:1px}
 
 <nav class="nav">
   <button class="active" onclick="nav('clas',this)">🏅 Clasificación</button>
-  <button onclick="nav('quin',this)">👤 Quinielas</button>
+  <button onclick="nav('quin',this)">📝 Quiniela 1</button>
   <button onclick="nav('grup',this)">🗺️ Ruta</button>
   <button onclick="nav('comp',this)">📊 Comparativa</button>
   <button onclick="nav('q2',this)">⚽ Quiniela 2</button>
@@ -250,10 +250,10 @@ select:focus{outline:2px solid var(--dorado);outline-offset:1px}
     <th class="c" title="Exactos">✦</th>
     <th class="c" title="Ganador">✓</th>
     <th class="c" title="Fallos">✗</th>
-    <th id="th-nx0" class="c nx-th">—</th>
-    <th id="th-nx1" class="c nx-th">—</th>
-    <th id="th-nx2" class="c nx-th">—</th>
-    <th id="th-nx3" class="c nx-th">—</th>
+    <th id="th-nx0" class="c nx-th" title="Último resultado">—</th>
+    <th id="th-nx1" class="c nx-th" title="Penúltimo resultado">—</th>
+    <th id="th-nx2" class="c nx-th" title="Próximo partido">—</th>
+    <th id="th-nx3" class="c nx-th" title="Siguiente partido">—</th>
   </tr></thead>
   <tbody id="tb-clas"></tbody>
 </table>
@@ -273,9 +273,7 @@ select:focus{outline:2px solid var(--dorado);outline-offset:1px}
   <label>Ver quiniela de:</label>
   <select id="sel-p" onchange="renderQuin()"></select>
   <select id="sel-fase" onchange="renderQuin()">
-    <option value="all">Todas las fases</option>
     <option value="grupos">Fase de grupos</option>
-    <option value="ko">Eliminatorias</option>
   </select>
 </div>
 <div id="quin-out"></div>
@@ -1259,37 +1257,40 @@ function renderClas(){
   });
   const total = sorted.length;
 
-  // KO bracket match order (P73-P104 in chronological order)
-  const KO_ORDER = ALL_BRACKET_SLOTS.map(s => s.id);
+  // 2 últimos resultados KO (más reciente primero)
+  const recentKOSlots = ALL_BRACKET_SLOTS
+    .filter(s => {
+      const slot = realBracketSlots[s.id];
+      return slot && typeof slot.h === 'number' && typeof slot.a === 'number';
+    })
+    .slice().reverse()
+    .slice(0, 2)
+    .map(s => ({
+      _slotId: s.id, _played: true,
+      home: realBracketSlots[s.id].home,
+      away: realBracketSlots[s.id].away,
+      phase: 'ko', round: s.round, group: s.id, idx: -1
+    }));
 
-  // Build a unified list of upcoming matches (grupos pending + KO not yet played)
-  // grupos: filter pending group matches (all 72 done now so this will be empty)
-  const pendingGrupos = FX.filter(m => m.phase==='grupos' && !realRes[m.idx] &&
-    !(liveMatches[m.idx]?.status==='IN_PLAY'||liveMatches[m.idx]?.status==='PAUSED'))
-    .sort((a,b) => a.idx - b.idx);
-
-  // KO: slots without a real result yet, in bracket order
+  // 2 próximos partidos KO sin resultado (en orden cronológico)
   const pendingKO = KO_ORDER
     .filter(slotId => {
       const s = realBracketSlots[slotId];
-      return s && s.home && (!s.h && s.h !== 0); // slot defined but no result yet
+      return s && s.home && s.home !== '?' && s.away && s.away !== '?'
+        && typeof s.h !== 'number';
     })
+    .slice(0, 2)
     .map(slotId => ({
-      _slotId: slotId,
+      _slotId: slotId, _played: false,
       home: realBracketSlots[slotId].home,
       away: realBracketSlots[slotId].away,
-      phase: 'ko', phase_label: 'Eliminatorias',
-      group: slotId, round: slotId, idx: -1
+      phase: 'ko', round: ALL_BRACKET_SLOTS.find(x=>x.id===slotId)?.round||slotId,
+      group: slotId, idx: -1
     }));
 
-  // Live KO matches
-  const inPlayGrupos = FX.filter(m => m.phase==='grupos' && liveMatches[m.idx] &&
-    (liveMatches[m.idx].status==='IN_PLAY' || liveMatches[m.idx].status==='PAUSED'));
-
-  const slots = 4;
-  // Priority: live first, then upcoming grupos, then upcoming KO
-  const allUpcoming = [...inPlayGrupos, ...pendingGrupos, ...pendingKO];
-  const nxMatches = allUpcoming.slice(0, slots);
+  // Final: [último resultado, penúltimo, próximo, siguiente]
+  const nxMatches = [...recentKOSlots, ...pendingKO];
+  const KO_ORDER = ALL_BRACKET_SLOTS.map(s => s.id);
 
   // Función abreviadora de nombre de equipo
   const abbr = t => {
@@ -1310,28 +1311,31 @@ function renderClas(){
     return MAP[t] || t.slice(0,3).toUpperCase();
   };
 
-  // Actualizar headers con los partidos próximos
+  // Actualizar headers con últimos 2 resultados + próximos 2
   nxMatches.forEach((m,i)=>{
     const el = document.getElementById('th-nx'+i);
     if(!el) return;
     const isKO = m.phase === 'ko';
-    const live = !isKO && liveMatches[m.idx];
+    const played = m._played;
+    const slotId = m._slotId;
+    const live = isKO && liveMatches['ko_'+slotId];
     const isLive = live && (live.status==='IN_PLAY'||live.status==='PAUSED');
-    const isPlayed = !isKO && !!realRes[m.idx];
+
     let score;
     if(isLive){
       score = `<em style="color:var(--dorado2)">${live.h}-${live.a} 🔴</em>`;
       el.classList.add('live-now');
-    } else if(isPlayed){
-      const r = realRes[m.idx];
-      score = `<em>${r.h}-${r.a}</em>`;
+    } else if(played && isKO){
+      const s = realBracketSlots[slotId];
+      const penLabel = s?.penWinner ? ` pen.` : '';
+      score = `<em>${s.h}-${s.a}${penLabel}</em>`;
       el.classList.remove('live-now');
     } else {
-      score = `<em>${isKO ? m.round : m.round}</em>`;
+      score = `<em>próx.</em>`;
       el.classList.remove('live-now');
     }
-    el.innerHTML = `${abbr(m.home)}<span style="color:rgba(255,255,255,.3)">v</span>${abbr(m.away)}${score}`;
-    el.title = `${m.home} vs ${m.away}${isKO ? ' (' + m.round + ')' : ' (' + m.round + ' Gr.' + m.group + ')'}`;
+    el.innerHTML = `${abbr(m.home)}<span style="color:rgba(255,255,255,.3)">v</span>${abbr(m.away)}<br>${score}`;
+    el.title = `${m.home} vs ${m.away} (${m.round})`;
   });
 
   const tbody = document.getElementById('tb-clas');
@@ -1430,8 +1434,7 @@ function renderQuin(){
   let curPhase='', curGrp='';
   FX.forEach((m, idx)=>{
     const isKO = m.phase !== 'grupos';
-    if(fase==='grupos' && isKO) return;
-    if(fase==='ko' && !isKO) return;
+    if(isKO) return; // Quiniela 1 solo muestra fase de grupos
 
     const pred = getPred(p, idx);
     const real = realRes[idx];
@@ -1962,8 +1965,10 @@ function saveFDKey(){
 
 function startLivePolling(){
   if(!FD_TOKEN) return;
-  fetchLiveMatches();
-  liveInterval = setInterval(async ()=>{
+  // Run immediately on start
+  fetchLiveMatches().then(() => { renderClas(); updateHdr(); });
+  // Then every 30 seconds
+  liveInterval = setInterval(async () => {
     await fetchLiveMatches();
     renderClas();
     updateHdr();
@@ -1973,12 +1978,13 @@ function startLivePolling(){
       if(id==='quin') renderQuin();
       if(id==='grup') renderGrupos();
       if(id==='comp') renderComp();
+      if(id==='q2') renderQ2();
     }
     const now = new Date();
     const t = now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const pill = document.getElementById('live-pill');
     if(pill) pill.innerHTML = `🟢 <strong style="color:#3fb950">EN VIVO</strong> <span style="font-size:.7rem;opacity:.7">${t}</span>`;
-  }, 60000);
+  }, 30000);
 }
 
 
@@ -2237,47 +2243,41 @@ function showDetail(p){
     <div><div style="font-size:1.2rem;font-weight:700;color:var(--txt)">${s.q2_pts}</div><div style="font-size:.68rem;color:var(--dim)">Fase KO</div></div>
   </div>`;
 
-  // Last 10 results — grupos + KO combined, most recent first
-  const recentGrupos = FX.filter(m => realRes[m.idx])
-    .map(m => ({
-      label: `${m.home} vs ${m.away}`,
-      real: realRes[m.idx],
-      pred: getPred(p, m.idx),
-      scorer: (r, pr) => scorePred(r, pr),
-      predLabel: (pr) => pr ? `${pr.h}-${pr.a}` : '?'
-    })).slice(-6).reverse();
-
+  // Últimos 8 resultados de Fase KO (ordenados por fecha, más reciente primero)
   const recentKO = ALL_BRACKET_SLOTS
     .filter(slot => {
       const s = realBracketSlots[slot.id];
       return s && typeof s.h === 'number' && typeof s.a === 'number';
     })
+    .slice().reverse()  // ALL_BRACKET_SLOTS ya está en orden fecha, invertimos para más reciente primero
+    .slice(0, 8)
     .map(slot => {
       const s = realBracketSlots[slot.id];
       const q2pred = getQ2Pred(p, slot.id);
       const real = {h: s.h, a: s.a};
+      const penLabel = s.penWinner ? ` (pen. ${s.penWinner})` : '';
       return {
-        label: `${s.home} vs ${s.away} (${slot.id})`,
-        real,
-        pred: q2pred,
+        label: `${s.home} vs ${s.away} [${slot.round}]`,
+        real, pred: q2pred,
         scorer: (r, pr) => scoreQ2Match(r, pr),
-        predLabel: (pr) => pr ? `${pr.h}-${pr.a}` : '?'
+        predLabel: (pr) => pr ? `${pr.h}-${pr.a}` : '?',
+        resultLabel: `${s.h}-${s.a}${penLabel}`
       };
-    }).slice(-4).reverse();
+    });
 
-  const allRecent = [...recentKO, ...recentGrupos].slice(0, 10);
-
-  if(allRecent.length){
-    html += '<div style="font-size:.78rem;color:var(--dim);margin-bottom:5px">Últimos resultados:</div>';
-    allRecent.forEach(item => {
+  if(recentKO.length){
+    html += '<div style="font-size:.78rem;color:var(--dim);margin-bottom:5px">Últimos resultados Fase KO:</div>';
+    recentKO.forEach(item => {
       const {pts, type} = item.scorer(item.real, item.pred);
       const c = type==='exact'?'#79c0ff' : type==='correct'?'#3fb950' : '#f85149';
       const ic = type==='exact'?'✦' : type==='correct'?'✓' : '✗';
       html += `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--brd);font-size:.8rem">
         <span style="color:var(--dim)">${item.label}</span>
-        <span style="color:${c}">${ic} ${item.predLabel(item.pred)} <span style="color:var(--dim)">(${item.real.h}-${item.real.a})</span></span>
+        <span style="color:${c}">${ic} ${item.predLabel(item.pred)} <span style="color:var(--dim)">(${item.resultLabel})</span></span>
       </div>`;
     });
+  } else {
+    html += '<div style="font-size:.78rem;color:var(--dim);margin-bottom:5px">Aún no hay resultados de Fase KO.</div>';
   }
 
   // Award picks
