@@ -2051,17 +2051,14 @@ function scoreQ2Match(real, pred, realSlot){
   // realSlot: {home, away, h, a} — full real slot with team names
   if(!real || !pred || real.h === null) return {pts:0, type:'pending'};
 
-  // Si realSlot no tiene equipos definidos, no se puede validar → pendiente
-  if(!realSlot || !realSlot.home || !realSlot.away) return {pts:0, type:'pending'};
-
-  // Si pred no tiene equipos definidos, no se puede validar → pendiente
-  if(!pred.home || !pred.away) return {pts:0, type:'pending'};
-
-  // Los equipos predichos deben coincidir con los reales (en cualquier orden)
-  const ph = normalizeStr(pred.home), pa = normalizeStr(pred.away);
-  const rh = normalizeStr(realSlot.home), ra = normalizeStr(realSlot.away);
-  const teamsMatch = (ph===rh && pa===ra) || (ph===ra && pa===rh);
-  if(!teamsMatch) return {pts:0, type:'wrong'};
+  // Si los equipos predichos no coinciden con los reales → 0 puntos
+  if(realSlot && pred.home && pred.away){
+    const ph = normalizeStr(pred.home), pa = normalizeStr(pred.away);
+    const rh = normalizeStr(realSlot.home), ra = normalizeStr(realSlot.away);
+    // Acepta cualquier orden (por si home/away está invertido)
+    const teamsMatch = (ph===rh && pa===ra) || (ph===ra && pa===rh);
+    if(!teamsMatch) return {pts:0, type:'wrong'};
+  }
 
   if(real.h === pred.h && real.a === pred.a) return {pts:5, type:'exact'};
   const rw = real.h>real.a?'1':(real.a>real.h?'2':'X');
