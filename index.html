@@ -468,7 +468,14 @@ async function loadFromDB(){
     realRes = {...KNOWN_RESULTS};
     res.forEach(r => { realRes[r.idx] = {h: r.home_goals, a: r.away_goals}; });
 
-    // Restore KO bracket results from ko_equipos table
+    // Pre-cargar slots KO conocidos; Supabase los sobreescribe si tiene datos más recientes
+    realBracketSlots = {};
+    Object.entries(KNOWN_KO_SLOTS).forEach(([slotId, slot]) => {
+      realBracketSlots[slotId] = {...slot};
+      if(slot.winner) propagateWinner(slotId, slot.winner);
+    });
+
+    // Restore KO bracket results from ko_equipos table (DB tiene prioridad sobre KNOWN_KO_SLOTS)
     // Format stored: home_team = "TeamA|h-a|TeamB", away_team = winner (may be penalty winner on draw)
     ko.forEach(r => {
       const slotId = 'P' + r.idx;
@@ -499,6 +506,11 @@ async function loadFromDB(){
   } catch(e){
     console.error('Error cargando datos:', e.message || e);
     realRes = {...KNOWN_RESULTS};
+    realBracketSlots = {};
+    Object.entries(KNOWN_KO_SLOTS).forEach(([slotId, slot]) => {
+      realBracketSlots[slotId] = {...slot};
+      if(slot.winner) propagateWinner(slotId, slot.winner);
+    });
   }
 }
 
@@ -729,6 +741,24 @@ async function fetchLiveMatches(){
 // realBracketSlots[slotId] = { home, away, h, a, winner }
 let realBracketSlots = {};
 let realKOResults = {};
+
+// Resultados KO conocidos al 7/07/2026 — se aplican como fallback igual que KNOWN_RESULTS
+// Formato: { slotId: {home, away, h, a, winner} }
+// P89={feeds:P74+P77} Paraguay(gan.Alemania) vs Francia(gan.Francia) → Francia 1-0
+// P90={feeds:P73+P75} Canadá(gan.Sudáfrica) vs Marruecos(gan.P.Bajos) → Marruecos 3-0
+// P91={feeds:P76+P78} Brasil(gan.Japón) vs Noruega(gan.CIV) → Noruega 2-1
+// P92={feeds:P79+P80} México(gan.Ecuador) vs Inglaterra(gan.RDCongo) → Inglaterra 3-2
+// P93={feeds:P83+P84} Portugal(gan.Croacia) vs España(gan.Austria) → España 1-0
+// P94={feeds:P81+P82} EE.UU.(gan.Bosnia) vs Bélgica(gan.Senegal) → Bélgica 4-1
+// P95+P96: Argentina-Egipto y Suiza-Colombia se juegan hoy 7/07 — pendientes
+const KNOWN_KO_SLOTS = {
+  'P89': {home:'Paraguay',   away:'Francia',   h:0, a:1, winner:'Francia'},
+  'P90': {home:'Canadá',     away:'Marruecos', h:0, a:3, winner:'Marruecos'},
+  'P91': {home:'Brasil',     away:'Noruega',   h:1, a:2, winner:'Noruega'},
+  'P92': {home:'México',     away:'Inglaterra',h:2, a:3, winner:'Inglaterra'},
+  'P93': {home:'Portugal',   away:'España',    h:0, a:1, winner:'España'},
+  'P94': {home:'Estados Unidos', away:'Bélgica', h:1, a:4, winner:'Bélgica'},
+};
 
 // Map real KO match (by team names) to bracket P-slot
 function updateRealBracketSlot(round, home, away, h, a){
@@ -2051,14 +2081,17 @@ function scoreQ2Match(real, pred, realSlot){
   // realSlot: {home, away, h, a} — full real slot with team names
   if(!real || !pred || real.h === null) return {pts:0, type:'pending'};
 
-  // Si los equipos predichos no coinciden con los reales → 0 puntos
-  if(realSlot && pred.home && pred.away){
-    const ph = normalizeStr(pred.home), pa = normalizeStr(pred.away);
-    const rh = normalizeStr(realSlot.home), ra = normalizeStr(realSlot.away);
-    // Acepta cualquier orden (por si home/away está invertido)
-    const teamsMatch = (ph===rh && pa===ra) || (ph===ra && pa===rh);
-    if(!teamsMatch) return {pts:0, type:'wrong'};
-  }
+  // Si realSlot no tiene equipos definidos, no se puede validar → pendiente
+  if(!realSlot || !realSlot.home || !realSlot.away) return {pts:0, type:'pending'};
+
+  // Si pred no tiene equipos definidos, no se puede validar → pendiente
+  if(!pred.home || !pred.away) return {pts:0, type:'pending'};
+
+  // Los equipos predichos deben coincidir con los reales (en cualquier orden)
+  const ph = normalizeStr(pred.home), pa = normalizeStr(pred.away);
+  const rh = normalizeStr(realSlot.home), ra = normalizeStr(realSlot.away);
+  const teamsMatch = (ph===rh && pa===ra) || (ph===ra && pa===rh);
+  if(!teamsMatch) return {pts:0, type:'wrong'};
 
   if(real.h === pred.h && real.a === pred.a) return {pts:5, type:'exact'};
   const rw = real.h>real.a?'1':(real.a>real.h?'2':'X');
@@ -2344,6 +2377,12 @@ const Q2_DATA = {"Tano L":{"r16":[{"home":"Sudáfrica","away":"Canadá","h":1,"a
   // Pre-populate R16 bracket slots (known from standings)
   REAL_R16_SLOTS.forEach(s => {
     realBracketSlots[s.id] = {home: s.home, away: s.away, h: null, a: null, winner: null};
+  });
+
+  // Aplicar slots KO conocidos en el render inicial (Supabase los sobreescribirá en background)
+  Object.entries(KNOWN_KO_SLOTS).forEach(([slotId, slot]) => {
+    realBracketSlots[slotId] = {...slot};
+    if(slot.winner) propagateWinner(slotId, slot.winner);
   });
 
   // RENDER IMMEDIATELY with embedded data (KNOWN_RESULTS + KNOWN_STANDINGS)
