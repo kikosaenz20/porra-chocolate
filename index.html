@@ -1393,8 +1393,8 @@ function renderClas(){
         const label = `${q2pred.h}-${q2pred.a}`;
         if(!hasResult) return `<td class="c"><span class="nx-pred nx-pend" title="${q2pred.home} ${label} ${q2pred.away}">${label}</span></td>`;
         const real2 = {h: realSlot.h, a: realSlot.a};
-        const {type} = scoreQ2Match(real2, q2pred);
-        const cls = type==='exact'?'nx-exact':type==='correct'?'nx-correct':'nx-wrong';
+        const {type} = scoreQ2Match(real2, q2pred, realSlot);
+        const cls = type==='exact'?'nx-exact':type==='correct'?'nx-correct':type==='pending'?'nx-pend':'nx-wrong';
         return `<td class="c"><span class="nx-pred ${cls}" title="${q2pred.home} ${label} ${q2pred.away}">${label}</span></td>`;
       }
 
@@ -2305,8 +2305,8 @@ function showDetail(p){
       const penLabel = s.penWinner ? ` (pen. ${s.penWinner})` : '';
       return {
         label: `${s.home} vs ${s.away} [${slot.round}]`,
-        real, pred: q2pred,
-        scorer: (r, pr) => scoreQ2Match(r, pr),
+        real, pred: q2pred, realSlot: s,
+        scorer: (r, pr, rs) => scoreQ2Match(r, pr, rs),
         predLabel: (pr) => pr ? `${pr.h}-${pr.a}` : '?',
         resultLabel: `${s.h}-${s.a}${penLabel}`
       };
@@ -2315,12 +2315,13 @@ function showDetail(p){
   if(recentKO.length){
     html += '<div style="font-size:.78rem;color:var(--dim);margin-bottom:5px">Últimos resultados Fase KO:</div>';
     recentKO.forEach(item => {
-      const {pts, type} = item.scorer(item.real, item.pred);
-      const c = type==='exact'?'#79c0ff' : type==='correct'?'#3fb950' : '#f85149';
-      const ic = type==='exact'?'✦' : type==='correct'?'✓' : '✗';
+      const {pts, type} = item.scorer(item.real, item.pred, item.realSlot);
+      const c = type==='exact'?'#79c0ff' : type==='correct'?'#3fb950' : type==='pending'?'var(--dim)' : '#f85149';
+      const ic = type==='exact'?'✦' : type==='correct'?'✓' : type==='pending'?'—' : '✗';
+      const ptsLabel = pts > 0 ? ` +${pts}` : '';
       html += `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--brd);font-size:.8rem">
         <span style="color:var(--dim)">${item.label}</span>
-        <span style="color:${c}">${ic} ${item.predLabel(item.pred)} <span style="color:var(--dim)">(${item.resultLabel})</span></span>
+        <span style="color:${c}">${ic} ${item.predLabel(item.pred)}<span style="color:var(--dim)"> (${item.resultLabel})</span>${ptsLabel}</span>
       </div>`;
     });
   } else {
