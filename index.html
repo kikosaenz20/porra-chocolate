@@ -1394,8 +1394,9 @@ function renderClas(){
         if(!hasResult) return `<td class="c"><span class="nx-pred nx-pend" title="${q2pred.home} ${label} ${q2pred.away}">${label}</span></td>`;
         const real2 = {h: realSlot.h, a: realSlot.a};
         const {type} = scoreQ2Match(real2, q2pred, realSlot);
-        const cls = type==='exact'?'nx-exact':type==='correct'?'nx-correct':type==='pending'?'nx-pend':'nx-wrong';
-        return `<td class="c"><span class="nx-pred ${cls}" title="${q2pred.home} ${label} ${q2pred.away}">${label}</span></td>`;
+        const cls = type==='exact'?'nx-exact':type==='correct'?'nx-correct':(type==='pending'||type==='nulled')?'nx-pend':'nx-wrong';
+        const displayLabel = type==='nulled' ? '—' : label;
+        return `<td class="c"><span class="nx-pred ${cls}" title="${q2pred.home} ${label} ${q2pred.away}">${displayLabel}</span></td>`;
       }
 
       const pred = getPred(p, m.idx);
@@ -2091,7 +2092,7 @@ function scoreQ2Match(real, pred, realSlot){
   const ph = normalizeStr(pred.home), pa = normalizeStr(pred.away);
   const rh = normalizeStr(realSlot.home), ra = normalizeStr(realSlot.away);
   const teamsMatch = (ph===rh && pa===ra) || (ph===ra && pa===rh);
-  if(!teamsMatch) return {pts:0, type:'wrong'};
+  if(!teamsMatch) return {pts:0, type:'nulled'}; // equipos distintos → nulo
 
   if(real.h === pred.h && real.a === pred.a) return {pts:5, type:'exact'};
   const rw = real.h>real.a?'1':(real.a>real.h?'2':'X');
@@ -2316,12 +2317,13 @@ function showDetail(p){
     html += '<div style="font-size:.78rem;color:var(--dim);margin-bottom:5px">Últimos resultados Fase KO:</div>';
     recentKO.forEach(item => {
       const {pts, type} = item.scorer(item.real, item.pred, item.realSlot);
-      const c = type==='exact'?'#79c0ff' : type==='correct'?'#3fb950' : type==='pending'?'var(--dim)' : '#f85149';
-      const ic = type==='exact'?'✦' : type==='correct'?'✓' : type==='pending'?'—' : '✗';
+      const c = type==='exact'?'#79c0ff' : type==='correct'?'#3fb950' : type==='pending'||type==='nulled'?'var(--dim)' : '#f85149';
+      const ic = type==='exact'?'✦' : type==='correct'?'✓' : type==='pending'?'—' : type==='nulled'?'∅' : '✗';
+      const predDisplay = type==='nulled' ? '—' : item.predLabel(item.pred);
       const ptsLabel = pts > 0 ? ` +${pts}` : '';
       html += `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--brd);font-size:.8rem">
         <span style="color:var(--dim)">${item.label}</span>
-        <span style="color:${c}">${ic} ${item.predLabel(item.pred)}<span style="color:var(--dim)"> (${item.resultLabel})</span>${ptsLabel}</span>
+        <span style="color:${c}">${ic} ${predDisplay}<span style="color:var(--dim)"> (${item.resultLabel})</span>${ptsLabel}</span>
       </div>`;
     });
   } else {
