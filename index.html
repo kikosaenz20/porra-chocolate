@@ -863,6 +863,41 @@ const KNOWN_RESULTS = {
   69:{h:3,a:1}, // RD Congo 3-1 Uzbekistán
   70:{h:0,a:2}, // Panamá 0-2 Inglaterra
   71:{h:2,a:1}, // Croacia 2-1 Ghana
+  // ── 16AVOS DE FINAL ─────────────────────────────────────────────
+  // Fixture idx 72-87 predefinidos en el HTML. Los resultados reales se mapean
+  // por orden cronológico (participantes pronosticaron según el bracket predefinido).
+  // Sólo el W (1/2/X) es lo que puntúa en Q1; marcadores reales a 90 min.
+  72:{h:0,a:1},  // slot 72 → Sudáfrica 0-1 Canadá (ganó away)
+  73:{h:2,a:1},  // slot 73 → Brasil 2-1 Japón (ganó home)
+  74:{h:1,a:1},  // slot 74 → Alemania 1-1 Paraguay pen (X en 90min; Paraguay ganó penales)
+  75:{h:1,a:1},  // slot 75 → Países Bajos 1-1 Marruecos pen (X en 90min; Marruecos pen)
+  76:{h:1,a:2},  // slot 76 → Costa de Marfil 1-2 Noruega (ganó away)
+  77:{h:3,a:0},  // slot 77 → Francia 3-0 Suecia (ganó home)
+  78:{h:2,a:0},  // slot 78 → México 2-0 Ecuador (ganó home)
+  79:{h:2,a:1},  // slot 79 → Inglaterra 2-1 RD Congo (ganó home)
+  80:{h:3,a:2},  // slot 80 → Bélgica 3-2 Senegal (ganó home, prórroga)
+  81:{h:2,a:0},  // slot 81 → Estados Unidos 2-0 Bosnia (ganó home)
+  82:{h:3,a:0},  // slot 82 → España 3-0 Austria (ganó home)
+  83:{h:2,a:1},  // slot 83 → Portugal 2-1 Croacia (ganó home)
+  84:{h:2,a:0},  // slot 84 → Suiza 2-0 Argelia (ganó home)
+  85:{h:1,a:1},  // slot 85 → Australia 1-1 Egipto pen (X en 90min; Egipto pen)
+  86:{h:3,a:2},  // slot 86 → Argentina 3-2 Cabo Verde (ganó home, prórroga)
+  87:{h:1,a:0},  // slot 87 → Colombia 1-0 Ghana (ganó home)
+  // ── OCTAVOS DE FINAL ────────────────────────────────────────────
+  // Fixture idx 88-95 (r8) del HTML
+  88:{h:0,a:3},  // slot 88 → Canadá 0-3 Marruecos
+  89:{h:0,a:1},  // slot 89 → Paraguay 0-1 Francia
+  90:{h:1,a:2},  // slot 90 → Brasil 1-2 Noruega
+  91:{h:2,a:3},  // slot 91 → México 2-3 Inglaterra
+  92:{h:0,a:1},  // slot 92 → Portugal 0-1 España (Colombia vs España en fixture, real España ganó)
+  93:{h:1,a:4},  // slot 93 → Estados Unidos 1-4 Bélgica
+  94:{h:3,a:2},  // slot 94 → Argentina 3-2 Egipto (prórroga)
+  95:{h:0,a:0},  // slot 95 → Suiza 0-0(pen) Colombia (Colombia ganó penales)
+  // ── CUARTOS DE FINAL ────────────────────────────────────────────
+  96:{h:2,a:0},  // slot 96 → Francia 2-0 Marruecos
+  97:{h:2,a:1},  // slot 97 → España 2-1 Bélgica
+  98:{h:1,a:2},  // slot 98 → Noruega 1-2 Inglaterra
+  99:{h:3,a:1},  // slot 99 → Argentina 3-1 Suiza
 };
 
 // Clasificaciones finales de todos los grupos (fase de grupos terminada)
@@ -1142,8 +1177,9 @@ function calcAllScores(resMap, standingsMap, awardsMap){
               standing_pts:0, ko_bracket_pts:0, award_pts:0, q2_pts:0};
   });
 
-  // Match points
+  // Match points — SOLO fase de grupos (los KO se puntúan en Q2 via calcQ2Scores)
   FX.forEach((m, idx) => {
+    if(m.phase !== 'grupos') return; // ignorar R16, R8, QF, SF, final
     const real = resMap[idx];
     P.forEach(p => {
       const pred = getPred(p, idx);
