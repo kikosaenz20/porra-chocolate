@@ -742,22 +742,41 @@ async function fetchLiveMatches(){
 let realBracketSlots = {};
 let realKOResults = {};
 
-// Resultados KO conocidos al 7/07/2026 — se aplican como fallback igual que KNOWN_RESULTS
+// Resultados KO conocidos al 14/07/2026 — se aplican como fallback igual que KNOWN_RESULTS
 // Formato: { slotId: {home, away, h, a, winner} }
-// P89={feeds:P74+P77} Paraguay(gan.Alemania) vs Francia(gan.Francia) → Francia 1-0
-// P90={feeds:P73+P75} Canadá(gan.Sudáfrica) vs Marruecos(gan.P.Bajos) → Marruecos 3-0
-// P91={feeds:P76+P78} Brasil(gan.Japón) vs Noruega(gan.CIV) → Noruega 2-1
-// P92={feeds:P79+P80} México(gan.Ecuador) vs Inglaterra(gan.RDCongo) → Inglaterra 3-2
-// P93={feeds:P83+P84} Portugal(gan.Croacia) vs España(gan.Austria) → España 1-0
-// P94={feeds:P81+P82} EE.UU.(gan.Bosnia) vs Bélgica(gan.Senegal) → Bélgica 4-1
-// P95+P96: Argentina-Egipto y Suiza-Colombia se juegan hoy 7/07 — pendientes
 const KNOWN_KO_SLOTS = {
-  'P89': {home:'Paraguay',   away:'Francia',   h:0, a:1, winner:'Francia'},
-  'P90': {home:'Canadá',     away:'Marruecos', h:0, a:3, winner:'Marruecos'},
-  'P91': {home:'Brasil',     away:'Noruega',   h:1, a:2, winner:'Noruega'},
-  'P92': {home:'México',     away:'Inglaterra',h:2, a:3, winner:'Inglaterra'},
-  'P93': {home:'Portugal',   away:'España',    h:0, a:1, winner:'España'},
-  'P94': {home:'Estados Unidos', away:'Bélgica', h:1, a:4, winner:'Bélgica'},
+  // ── DIECISEISAVOS (R16) ────────────────────────────────────────
+  'P73': {home:'Sudáfrica',      away:'Canadá',      h:0, a:1, winner:'Canadá'},
+  'P74': {home:'Brasil',         away:'Japón',        h:2, a:1, winner:'Brasil'},
+  'P75': {home:'Alemania',       away:'Paraguay',     h:1, a:1, winner:'Paraguay', penWinner:'Paraguay'},
+  'P76': {home:'Países Bajos',   away:'Marruecos',   h:1, a:1, winner:'Marruecos', penWinner:'Marruecos'},
+  'P77': {home:'Costa de Marfil',away:'Noruega',      h:1, a:2, winner:'Noruega'},
+  'P78': {home:'Francia',        away:'Suecia',       h:3, a:0, winner:'Francia'},
+  'P79': {home:'México',         away:'Ecuador',      h:2, a:0, winner:'México'},
+  'P80': {home:'Inglaterra',     away:'RD Congo',     h:2, a:1, winner:'Inglaterra'},
+  'P81': {home:'Bélgica',        away:'Senegal',      h:3, a:2, winner:'Bélgica'},
+  'P82': {home:'Estados Unidos', away:'Bosnia y Herzegovina', h:2, a:0, winner:'Estados Unidos'},
+  'P83': {home:'España',         away:'Austria',      h:3, a:0, winner:'España'},
+  'P84': {home:'Portugal',       away:'Croacia',      h:2, a:1, winner:'Portugal'},
+  'P85': {home:'Suiza',          away:'Argelia',      h:2, a:0, winner:'Suiza'},
+  'P86': {home:'Australia',      away:'Egipto',       h:1, a:1, winner:'Egipto', penWinner:'Egipto'},
+  'P87': {home:'Argentina',      away:'Cabo Verde',   h:3, a:2, winner:'Argentina'},
+  'P88': {home:'Colombia',       away:'Ghana',        h:1, a:0, winner:'Colombia'},
+  // ── OCTAVOS (R8) ───────────────────────────────────────────────
+  'P89': {home:'Paraguay',       away:'Francia',      h:0, a:1, winner:'Francia'},
+  'P90': {home:'Canadá',         away:'Marruecos',   h:0, a:3, winner:'Marruecos'},
+  'P91': {home:'Brasil',         away:'Noruega',      h:1, a:2, winner:'Noruega'},
+  'P92': {home:'México',         away:'Inglaterra',   h:2, a:3, winner:'Inglaterra'},
+  'P93': {home:'Portugal',       away:'España',       h:0, a:1, winner:'España'},
+  'P94': {home:'Estados Unidos', away:'Bélgica',      h:1, a:4, winner:'Bélgica'},
+  'P95': {home:'Argentina',      away:'Egipto',       h:3, a:2, winner:'Argentina'},
+  'P96': {home:'Suiza',          away:'Colombia',     h:0, a:0, winner:'Colombia', penWinner:'Colombia'},
+  // ── CUARTOS (QF) ───────────────────────────────────────────────
+  'P97': {home:'Francia',        away:'Marruecos',   h:2, a:0, winner:'Francia'},
+  'P98': {home:'España',         away:'Bélgica',      h:2, a:1, winner:'España'},
+  'P99': {home:'Noruega',        away:'Inglaterra',   h:1, a:2, winner:'Inglaterra'},
+  'P100':{home:'Argentina',      away:'Suiza',        h:3, a:1, winner:'Argentina'},
+  // ── SEMIFINALES y más: pendientes (se cargarán vía Admin/Supabase)
 };
 
 // Map real KO match (by team names) to bracket P-slot
@@ -1207,13 +1226,45 @@ function calcAllScores(resMap, standingsMap, awardsMap){
   // Awards bonus
   if(awardsMap && Object.keys(awardsMap).length > 0){
     const awPts = {campeon:20, subcampeon:12, tercero:6, bota_oro:10, bota_plata:10, bota_bronce:10, balon_oro:10};
+
+    // Mapa de aliases: variantes escritas por participantes → nombre canónico normalizado
+    const AWARD_ALIASES = {
+      // Mbappé
+      'mbappe':'kylian mbappe', 'kylian mbappe':'kylian mbappe', 'kylian mbappé':'kylian mbappe',
+      // Lamine Yamal
+      'lamine':'lamine yamal', 'lamine yamal':'lamine yamal',
+      // Emiliano Martínez
+      'martinez':'emiliano martinez', 'dibu martinez':'emiliano martinez',
+      'emiliano martinez':'emiliano martinez',
+      // Unai Simón
+      'unai':'unai simon', 'unai simon':'unai simon', 'unai simón':'unai simon',
+      // Harry Kane
+      'kane':'harry kane', 'harry kane':'harry kane',
+      // Vitinha
+      'vitinha':'vitinha', 'vitnha':'vitinha', 'vitihna':'vitinha',
+      // Diogo Costa
+      'diogo costa':'diogo costa', 'diego costa':'diogo costa',
+      // Désire Doué
+      'doue':'desire doue', 'desire doue':'desire doue', 'désire doué':'desire doue',
+      // Jordan Pickford
+      'pickford':'jordan pickford', 'jordan pickford':'jordan pickford',
+      // Dembélé
+      'dembele':'ousmane dembele', 'ousmane dembele':'ousmane dembele',
+    };
+
+    const canonAward = v => {
+      if(!v) return '';
+      const n = normalizeStr(v.toLowerCase());
+      return AWARD_ALIASES[n] || n;
+    };
+
     P.forEach(p => {
       const pAw = D.awards[p] || {};
       let awTot = 0;
       Object.keys(awPts).forEach(key => {
         const realVal = awardsMap[key];
         const predVal = pAw[key];
-        if(realVal && predVal && normalizeStr(realVal) === normalizeStr(predVal)){
+        if(realVal && predVal && canonAward(realVal) === canonAward(predVal)){
           awTot += awPts[key];
         }
       });
